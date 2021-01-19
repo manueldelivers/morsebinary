@@ -1,0 +1,163 @@
+#!/usr/bin/python3
+
+from collections import defaultdict
+from pathlib import Path
+import argparse
+import sys
+import os
+
+VERSION = '0.1'
+INSTALL_LOCATION = Path('/usr/local/bin')
+
+morse2letter = defaultdict(lambda: '_', {
+    ".-": "a",
+    "-...": "b",
+    "-.-.": "c",
+    "-..": "d",
+    ".": "e",
+    "..-.": "f",
+    "--.": "g",
+    "....": "h",
+    "..": "i",
+    ".---": "j",
+    "-.-": "k",
+    ".-..": "l",
+    "--": "m",
+    "-.": "n",
+    "---": "o",
+    ".--.": "p",
+    "--.-": "q",
+    ".-.": "r",
+    "...": "s",
+    "-": "t",
+    "..-": "u",
+    "...-": "v",
+    ".--": "w",
+    "-..-": "x",
+    "-.--": "y",
+    "--..": "z",
+    "-----": "0",
+    ".----": "1",
+    "..---": "2",
+    "...--": "3",
+    "....-": "4",
+    ".....": "5",
+    "-....": "6",
+    "--...": "7",
+    "---..": "8",
+    "----.": "9",
+    ".-...": "&",
+    ".----.": "'",
+    ".--.-.": "@",
+    "-.--.-": ")",
+    "-.--.": "(",
+    "---...": ":",
+    "--..--": ",",
+    "-...-": "=",
+    "-.-.--": "!",
+    ".-.-.-": ".",
+    "-....-": "-",
+    ".-.-.": "+",
+    ".-..-.": '"',
+    "..--..": "?",
+    "-..-.": "/",
+    "": "",
+    " ": " "
+})
+
+letter2morse = defaultdict(lambda: '_', {v: k for k, v in morse2letter.items()})
+
+
+def decode_binary(code):
+    def r(x): return x.replace('11', '-').replace('1', '.')
+
+    words = code.split('0000')
+    code = [[letter.split('0') for letter in w.split('00')] for w in words]
+    code = ' '.join(''.join(morse2letter[''.join(r(o) for o in letter)]
+                            for letter in w) for w in code)
+    return code
+
+
+def encode_binary(text):
+    def r(x): return '0'.join(o.replace('-', '11').replace('.', '1') for o in x)
+
+    return '00'.join(r(letter2morse[c]) for c in text).replace(' ', '')
+
+
+def fmanager(f, data):
+    if isinstance(data, str):
+        return f(data)
+    return [f(o) for o in data]
+
+
+def readfile(file):
+    return open(file, 'r').read().lower().splitlines()
+
+
+def writefile(obj, file):
+    if isinstance(obj, list):
+        obj = '\n'.join(obj)
+    return open(file, 'w').write(obj)
+
+
+def main(args):
+    if args.install:
+        os.system(f'cp {__file__} {INSTALL_LOCATION}')
+        return 0
+
+    if args.uninstall:
+        if not args.force:
+            if Path(__file__).absolute() == Path(INSTALL_LOCATION) / __file__:
+                print("Use flag --force to delete this file", file=sys.stderr)
+                return -1
+        os.system(f'rm {Path(INSTALL_LOCATION) / __file__}')
+        return 0
+
+    # sanity check
+    if args.encode == args.decode:
+        print("Must have either flag --encode or --decode", file=sys.stderr)
+        return -1
+
+    if args.stdin.isatty() and args.filename:  # if only filename
+        try:
+            data = readfile(args.filename)
+        except FileNotFoundError:
+            print(f"No such file {args.filename}", file=sys.stderr)
+            return -1
+    elif not args.stdin.isatty() and not args.filename:  # if only stdin
+        data = args.stdin.read().splitlines()
+    else:
+        print("Must have either stdin or a filename", file=sys.stderr)
+        return -1
+
+    lines = fmanager((encode_binary if args.encode else decode_binary), data)
+
+    if args.output:
+        writefile(lines, args.output)
+    else:
+        for line in lines:
+            print(line)
+    return 0
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename', nargs='?', help='input filename')
+    parser.add_argument('stdin', nargs='?', type=argparse.FileType('r'),
+                        default=sys.stdin, help='alternative input')
+    parser.add_argument("-e", "--encode", action='store_true',
+                        help='pick either encode or decode')
+    parser.add_argument("-d", "--decode", action='store_true',
+                        help='pick either encode or decode')
+    parser.add_argument("-o", "--output", help='output filename')
+    parser.add_argument("--install", action='store_true',
+                        help=f'install {__file__} in {INSTALL_LOCATION}')
+    parser.add_argument("--uninstall", action='store_true',
+                        help=f'uninstall {__file__} from {INSTALL_LOCATION}')
+    parser.add_argument("--force", action='store_true',
+                        help='force uninstall if needed')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    main(parse_arguments())
